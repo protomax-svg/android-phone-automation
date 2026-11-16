@@ -1,0 +1,27 @@
+[Unit]
+Description=Android phone gateway, mode %i (PC Wi-Fi hotspot -> sing-box -> proxy|direct)
+After=NetworkManager.service network-online.target
+Wants=network-online.target android-proxy-gw-dhcp@%i.service android-proxy-gw-tz@%i.service
+Requires=NetworkManager.service
+# gentle restarts: rapid hotspot flapping makes Android mark the network as "wrong password"
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# privileged setup/teardown (AP + nftables); sing-box itself runs unprivileged
+ExecStartPre=+/usr/local/lib/android-proxy-gw/gw.sh up
+ExecStart=/usr/bin/sing-box run -c ${CREDENTIALS_DIRECTORY}/config.json -D ${RUNTIME_DIRECTORY}
+ExecStopPost=+/usr/local/lib/android-proxy-gw/gw.sh down
+LoadCredential=config.json:/etc/android-proxy-gw/sing-box-%i.json
+DynamicUser=yes
+RuntimeDirectory=android-proxy-gw-sb
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=yes
+
+[Install]
+WantedBy=multi-user.target

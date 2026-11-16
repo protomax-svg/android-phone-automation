@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone Control</title>
+<link rel="stylesheet" href="/static/fonts.css">
+<style>
+:root {
+  --bg: #e9e7e1; --pane: #f7f6f2; --pane-2: #efede7; --sunk: #e4e1d9;
+  --ink: #1d1c1a; --ink-2: #44423d; --muted: #77736a; --line: #d6d2c8; --line-2: #c5c0b4;
+  --accent: #c4471a; --accent-ink: #fff;
+  --ok: #2e7a4b; --bad: #b3261e; --warn: #a86b0c;
+  --term-bg: #1c1c1a; --term-ink: #d9d6cf; --term-muted: #8a867d;
+  --sans: "Plex Sans", system-ui, sans-serif;
+  --mono: "Plex Mono", ui-monospace, "JetBrains Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121211; --pane: #1a1a18; --pane-2: #21211f; --sunk: #161615;
+    --ink: #e7e5df; --ink-2: #c3c0b8; --muted: #8f8b82; --line: #2c2b28; --line-2: #3a3935;
+    --accent: #e8703d; --accent-ink: #160b05;
+    --ok: #5cb882; --bad: #ef6a5f; --warn: #d9a03f;
+    --term-bg: #0e0e0d; --term-ink: #d9d6cf; --term-muted: #7d7a72;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+button, input, textarea, select { font: inherit; color: inherit; }
+svg { display: block; }
+
+/* controls */
+button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 3px;
+  background: var(--pane); cursor: pointer; font-size: 13px; white-space: nowrap;
+}
+button:hover:not(:disabled) { background: var(--pane-2); border-color: var(--ink-2); }
+button:active:not(:disabled) { background: var(--sunk); }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.primary { background: var(--ink); border-color: var(--ink); color: var(--pane); font-weight: 500; }
+button.primary:hover:not(:disabled) { background: var(--ink-2); border-color: var(--ink-2); }
+button.danger { color: var(--bad); }
+button.danger:hover:not(:disabled) { border-color: var(--bad); }
+button.icon { width: 28px; padding: 0; }
+button.quiet { border-color: transparent; background: transparent; color: var(--muted); }
+button.quiet:hover:not(:disabled) { color: var(--ink); background: var(--pane-2); border-color: transparent; }
+select { height: 28px; border: 1px solid var(--line-2); border-radius: 3px; background: var(--pane); padding: 0 6px; font-size: 12.5px; }
+input[type=text], input:not([type]) { height: 28px; border: 1px solid var(--line-2); border-radius: 3px; background: var(--pane); padding: 0 8px; }
+input[type=checkbox] { accent-color: var(--ink); margin: 0; }
+
+.label { font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.grow1 { flex: 1; min-width: 0; }
+.led { width: 7px; height: 7px; border-radius: 1px; background: var(--line-2); flex: none; display: inline-block; }
+.led.ok { background: var(--ok); } .led.bad { background: var(--bad); } .led.busy { background: var(--warn); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .35; } }
+.tag { font: 500 10.5px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 3px 5px 2px; border: 1px solid currentColor; border-radius: 2px; }
+.tag.proxy { color: var(--ok); } .tag.direct { color: var(--warn); }
+
+/* shell */
+.shell { display: grid; grid-template-rows: 40px 1fr; height: 100vh; }
+.topbar { display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--pane); }
+.brand { font: 600 13px/1 var(--mono); letter-spacing: .04em; }
+.brand b { color: var(--accent); font-weight: 600; }
+.topbar .sep { width: 1px; height: 16px; background: var(--line); }
+#summary { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1500px) { .hint { display: none; } }
+.hint { font-size: 12px; color: var(--muted); }
+.app { display: grid; grid-template-columns: auto minmax(420px, 1fr) 350px; min-height: 0; }
+.pane { background: var(--pane); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.app > * + * { border-left: 1px solid var(--line); }
+.pane-head { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--line); flex: none; }
+
+/* phones */
+#phones { display: flex; min-height: 0; background: var(--bg); }
+#phones .empty { padding: 28px; color: var(--muted); align-self: center; max-width: 340px; }
+.phone { border-right: 1px solid var(--line); position: relative; flex: none; }
+.phone .pane-head, .phone .controls { min-width: 0; }
+.phone .pane-head select { flex: none; }
+.phone.narrow .claude-mark { display: none !important; }
+.phone.narrow .keys button { width: 30px; }
+.phone:last-child { border-right: 0; }
+.phone.target .pane-head { box-shadow: inset 0 3px 0 var(--accent); }
+.pname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.pname:hover { text-decoration: underline; text-underline-offset: 3px; }
+.claude-mark { display: none; font: 500 10.5px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.phone.target .claude-mark { display: inline; }
+.screen-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 14px; min-height: 0; position: relative; background: var(--pane-2); }
+.screen-wrap canvas { background: #000; border-radius: 6px; touch-action: none; outline: none; display: block; cursor: crosshair;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 0 5px #0b0b0a; }
+.screen-wrap canvas:focus-visible { box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 0 5px #0b0b0a, 0 0 0 7px var(--accent); }
+.screen-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 24px; color: #bdb9b0; font: 12.5px/1.5 var(--mono); pointer-events: none; white-space: pre-line; }
+.controls { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.keys { display: flex; justify-content: center; }
+.keys .grp { display: flex; }
+.keys .grp + .grp { margin-left: 8px; }
+.keys button { width: 34px; padding: 0; border-radius: 0; color: var(--ink-2); }
+.keys button + button { margin-left: -1px; }
+.keys .grp button:first-child { border-radius: 3px 0 0 3px; }
+.keys .grp button:last-child { border-radius: 0 3px 3px 0; }
+.keys button:hover:not(:disabled) { position: relative; z-index: 1; }
+.typebar { display: flex; gap: 6px; }
+.typebar input { flex: 1; min-width: 0; }
+
+/* chat */
+.seg { display: inline-flex; min-width: 0; }
+.seg button { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.seg button { border-radius: 0; gap: 7px; font-size: 12.5px; }
+.seg button + button { margin-left: -1px; }
+.seg button:first-child { border-radius: 3px 0 0 3px; }
+.seg button:last-child { border-radius: 0 3px 3px 0; }
+.seg button.on { background: var(--ink); border-color: var(--ink); color: var(--pane); position: relative; z-index: 1; }
+.chat { position: relative; }
+#messages { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+#log { padding: 16px 18px 12px; display: flex; flex-direction: column; }
+.ev { max-width: 760px; width: 100%; }
+.ev + .ev { margin-top: 6px; }
+.ev.turn { margin-top: 18px; }
+.ev.turn:first-child { margin-top: 0; }
+.who { display: flex; gap: 8px; align-items: baseline; margin-bottom: 3px; }
+.who .label { color: var(--ink-2); }
+.who time { font: 11px var(--mono); color: var(--muted); }
+.ev.user .body { white-space: pre-wrap; border-left: 2px solid var(--ink); padding: 1px 0 1px 10px; }
+.ev.assistant .body { overflow-wrap: anywhere; }
+.ev pre { font: 12px/1.5 var(--mono); background: var(--pane-2); border: 1px solid var(--line); padding: 8px 10px; border-radius: 3px; overflow-x: auto; white-space: pre; margin: 6px 0; }
+.ev code { font: 12.5px var(--mono); background: var(--pane-2); padding: 0 3px; border-radius: 2px; }
+details.tool { font: 12px/1.5 var(--mono); color: var(--muted); border-left: 2px solid var(--line-2); padding-left: 10px; }
+details.tool summary { cursor: pointer; list-style: none; display: flex; gap: 8px; min-width: 0; }
+details.tool summary::-webkit-details-marker { display: none; }
+details.tool summary .cmd { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+details.tool summary .nm { flex: none; color: var(--muted); }
+details.tool .peek { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+details.tool[open] .peek { display: none; }
+details.tool .full { white-space: pre-wrap; margin: 4px 0 2px; max-height: 300px; overflow: auto; color: var(--ink-2); }
+details.tool .full + .full { border-top: 1px dashed var(--line-2); padding-top: 4px; }
+details.tool.err { border-left-color: var(--bad); }
+details.tool.err .nm, details.tool.err .peek { color: var(--bad); }
+details.tool:hover { border-left-color: var(--ink-2); }
+figure.shot { margin: 8px 0 4px; display: inline-flex; flex-direction: column; gap: 4px; width: auto; }
+figure.shot img { width: 132px; border-radius: 4px; border: 1px solid var(--line-2); cursor: zoom-in; display: block; background: #000; }
+figure.shot figcaption { font: 11.5px/1.35 var(--mono); color: var(--muted); max-width: 220px; }
+.ev.done { font: 11.5px var(--mono); color: var(--muted); display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.ev.done::before, .ev.done::after { content: ""; height: 1px; background: var(--line); flex: 1; }
+.ev.error .body { color: var(--bad); border-left: 2px solid var(--bad); padding-left: 10px; white-space: pre-wrap; }
+.ev.info { font-size: 12.5px; color: var(--muted); }
+.intro { color: var(--muted); max-width: 520px; font-size: 13.5px; }
+.intro p { margin: 0 0 8px; }
+.intro b { color: var(--ink); font-weight: 500; }
+#jump { position: absolute; right: 18px; bottom: 84px; display: none; z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+#jump.on { display: inline-flex; }
+.working { display: none; align-items: center; gap: 10px; padding: 0 18px; height: 30px; font-size: 12.5px; color: var(--ink-2); border-top: 1px solid var(--line); position: relative; overflow: hidden; flex: none; }
+.working.on { display: flex; }
+.working::after { content: ""; position: absolute; left: 0; top: -1px; height: 2px; width: 30%; background: var(--accent); animation: slide 1.4s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+.composer { border-top: 1px solid var(--line); padding: 12px; display: flex; gap: 8px; align-items: flex-end; background: var(--pane); flex: none; }
+.composer textarea { flex: 1; resize: none; min-height: 40px; max-height: 200px; background: var(--pane); border: 1px solid var(--line-2);
+  border-radius: 3px; padding: 9px 10px; line-height: 1.45; }
+.composer textarea:focus { border-color: var(--ink-2); outline: none; }
+.composer button { height: 40px; padding: 0 14px; }
+
+/* side */
+.side { display: flex; flex-direction: column; min-height: 0; background: var(--pane); }
+.section { display: flex; flex-direction: column; min-height: 0; }
+.section + .section { border-top: 1px solid var(--line); }
+.section.files { flex: 1 1 auto; min-height: 230px; }
+.section.out { flex: 0 1 240px; min-height: 130px; }
+.drop { margin: 12px 12px 8px; border: 1px dashed var(--line-2); border-radius: 3px; padding: 14px; text-align: center; color: var(--muted); cursor: pointer; font-size: 13px; }
+.drop:hover, .drop.over { border-color: var(--ink-2); color: var(--ink); background: var(--pane-2); }
+.opts { padding: 0 12px 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--ink-2); }
+.opts label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.opts .label { align-self: center; }
+#platforms .label { width: 100%; margin: 2px 0 2px; }
+#files { list-style: none; margin: 0; padding: 0; overflow-y: auto; border-top: 1px solid var(--line); flex: 1; }
+#files li { border-bottom: 1px solid var(--line); padding: 8px 12px; display: grid; grid-template-columns: 1fr auto; gap: 1px 8px; align-items: center; }
+#files li:hover { background: var(--pane-2); }
+#files .fname { font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#files .fmeta { font: 11.5px var(--mono); color: var(--muted); grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#files .fmeta b { color: var(--ink-2); font-weight: 500; }
+#files .factions { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 4px; }
+#files .factions button { height: 26px; padding: 0 8px; font-size: 12px; }
+#files .factions button.icon { width: 26px; padding: 0; }
+#files li.none { color: var(--muted); font-size: 12.5px; display: block; }
+#files li.none:hover { background: none; }
+.progress { height: 2px; background: var(--line); margin: 0 12px 8px; overflow: hidden; display: none; }
+.progress > div { height: 100%; width: 0; background: var(--ink); transition: width .2s; }
+.scripts { padding: 0 12px 12px; overflow-y: auto; max-height: 32vh; }
+.group > .label { display: block; margin: 12px 0 6px; }
+.btns { display: flex; flex-wrap: wrap; gap: 5px; }
+.btns button { height: 26px; padding: 0 9px; font-size: 12.5px; }
+.btns button.running { border-color: var(--warn); color: var(--warn); }
+#console { margin: 0; padding: 10px 12px; font: 11.5px/1.55 var(--mono); white-space: pre-wrap; overflow-y: auto; flex: 1;
+  background: var(--term-bg); color: var(--term-ink); min-height: 90px; overflow-wrap: anywhere; }
+#console.muted { color: var(--term-muted); }
+
+@media (max-width: 1280px) {
+  .shell { height: auto; min-height: 100vh; }
+  .app { grid-template-columns: 1fr 1fr; }
+  #phones { grid-column: 1 / -1; justify-content: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  .app > .chat { border-left: 0; height: 82vh; }
+  .side { height: 82vh; }
+  .hint { display: none; }
+}
+@media (max-width: 780px) {
+  .app { grid-template-columns: 1fr; }
+  #phones { flex-direction: column; }
+  .phone { border-right: 0; border-bottom: 1px solid var(--line); }
+  .side { border-left: 0; border-top: 1px solid var(--line); height: auto; }
+  .section.files, .section.out { flex: none; }
+  #console { max-height: 50vh; }
+  #summary { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <span class="brand">PHONE<b>/</b>CONTROL</span>
+    <span class="sep"></span>
+    <span id="summary">looking for phones…</span>
+    <span class="grow1"></span>
+    <span class="hint">On the screen: right-click = Back · middle-click = Home · type when focused</span>
+  </header>
+
+  <div class="app">
+    <!-- live phones -->
+    <div id="phones"><div class="empty">Looking for phones…</div></div>
+
+    <!-- Claude -->
+    <section class="pane chat">
+      <div class="pane-head">
+        <span id="chatDot" class="led"></span>
+        <span class="label">Claude</span>
+        <span class="seg" id="targetPick"></span>
+        <span class="grow1"></span>
+        <button id="newChat" class="quiet" title="Start a new conversation with this phone (Claude forgets the current one)">New</button>
+      </div>
+      <div id="messages"><div id="log"></div></div>
+      <button id="jump" type="button">Latest ↓</button>
+      <div class="working" id="working"><span id="workingText">Working…</span></div>
+      <form class="composer" id="composer">
+        <textarea id="prompt" rows="1" placeholder="Tell Claude what to do…" title="Enter sends · Shift+Enter adds a new line"></textarea>
+        <button type="submit" class="primary" id="sendBtn">Send</button>
+        <button type="button" class="danger" id="stopBtn" disabled>Stop</button>
+      </form>
+    </section>
+
+    <!-- files, scripts, output -->
+    <aside class="side">
+      <section class="section files">
+        <div class="pane-head"><span class="label">Files</span><span class="grow1"></span><span class="muted mono" id="fileCount" style="font-size:11.5px"></span></div>
+        <div class="drop" id="drop"><span>Drop videos here, or click to choose</span><input type="file" id="fileInput" multiple hidden accept="video/*,image/*"></div>
+        <div class="progress" id="progress"><div></div></div>
+        <div class="opts"><label><input type="checkbox" id="pushToPhone" checked> <span id="pushName">Copy to the selected phone's gallery</span></label></div>
+        <div class="opts" id="platforms">
+          <span class="label">Post to</span>
+          <label><input type="checkbox" value="TikTok" checked> TikTok</label>
+          <label><input type="checkbox" value="Instagram Reels"> Instagram</label>
+          <label><input type="checkbox" value="YouTube Shorts"> YouTube</label>
+          <label><input type="checkbox" value="Facebook Reels"> Facebook</label>
+        </div>
+        <ul id="files"></ul>
+      </section>
+
+      <section class="section">
+        <div class="pane-head"><span class="label">Scripts</span><span class="muted" id="scriptsOn" style="font-size:12.5px"></span><span class="grow1"></span><span class="muted mono" id="runState" style="font-size:11.5px"></span></div>
+        <div class="scripts">
+          <div class="group"><span class="label">Device</span><div class="btns">
+            <button data-run="status">Status</button>
+            <button data-run="info">Device info</button>
+            <button data-run="demo">Demo</button>
+            <button data-run="interaction-test" data-confirm="Run the tap/swipe/text test inside Settings search?">Interaction test</button>
+            <button data-run="stop">Stop</button>
+            <button data-run="stop-device">Stop + u2 server</button>
+          </div></div>
+          <div class="group"><span class="label">Location privacy</span><div class="btns">
+            <button data-run="privacy-check" title="Read-only: location, Bluetooth, scanning, nearby scanning">Check</button>
+            <button data-run="privacy-fix" title="Turn location, Bluetooth and all scanning OFF on the selected phone">Lock everything off</button>
+          </div></div>
+          <div class="group"><span class="label">Desktop mirror</span><div class="btns">
+            <button data-run="scrcpy-start">Open scrcpy window</button>
+            <button data-run="scrcpy-start-screen-off">Open, phone display off</button>
+          </div></div>
+          <div class="group" id="proxyGroup"><span class="label">Proxy gateway <span id="gwName"></span></span><div class="btns">
+            <button data-run="proxy-start">Start (proxy)</button>
+            <button data-run="proxy-connect-phone">Rejoin hotspot</button>
+            <button data-run="proxy-status">Status</button>
+            <button data-run="proxy-stop" class="danger" data-confirm="Stop the gateway? The proxy phone will have NO internet until you start it again.">Stop gateway</button>
+          </div></div>
+          <div class="group"><span class="label">Agent</span><div class="btns">
+            <button data-run="agent-check">Agent check</button>
+          </div></div>
+        </div>
+      </section>
+
+      <section class="section out">
+        <div class="pane-head"><span class="label">Output</span><span class="grow1"></span><button id="clearConsole" class="quiet">Clear</button></div>
+        <pre id="console" class="muted">Script output appears here.</pre>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = (s, root = document) => root.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const wsUrl = (p) => (location.protocol === "https:" ? "wss://" : "ws://") + location.host + p;
+const canDecode = "VideoDecoder" in window;
+
+let devices = [], gatewaySerial = "", pageBuild = null;
+let target = null;                       // the phone Claude, scripts and file copies act on
+const views = new Map();                 // serial -> PhoneView
+const devName = (s) => (devices.find(d => d.serial === s) || { name: s }).name;
+const forTarget = (url) => url + (url.includes("?") ? "&" : "?") + "serial=" + encodeURIComponent(target || "");
+
+/* line icons, 16px */
+const I = (d) => `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ICON = {
+  back: I('<path d="M10.5 3.5 5.5 8l5 4.5z"/>'),
+  home: I('<circle cx="8" cy="8" r="4.5"/>'),
+  recents: I('<rect x="4" y="4" width="8" height="8" rx="1"/>'),
+  voldown: I('<path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z"/><path d="M10.5 8h3.5"/>'),
+  volup: I('<path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z"/><path d="M10.5 8h3.5M12.25 6.25v3.5"/>'),
+  power: I('<path d="M8 2.5v5"/><path d="M4.6 4.6a4.8 4.8 0 1 0 6.8 0"/>'),
+  dispoff: I('<rect x="4" y="1.8" width="8" height="12.4" rx="1.2"/><path d="M2 14 14 2"/>'),
+  dispon: I('<rect x="4" y="1.8" width="8" height="12.4" rx="1.2"/><path d="M6.5 6.5h3M6.5 9h3"/>'),
+  reload: I('<path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.8v2.6h-2.6"/>'),
+  x: I('<path d="M4 4l8 8M12 4l-8 8"/>'),
+};
+
+/* ======================================================================= one live phone */
+const KEYMAP = { Enter: 66, Backspace: 67, Delete: 112, Tab: 61, Escape: 111, ArrowUp: 19, ArrowDown: 20,
+  ArrowLeft: 21, ArrowRight: 22, Home: 122, End: 123, PageUp: 92, PageDown: 93 };
+
+function spsCodec(d) {
+  for (let i = 0; i + 4 < d.length; i++) {
+    if (d[i] === 0 && d[i+1] === 0 && d[i+2] === 1 && (d[i+3] & 0x1f) === 7) {
+      const h = (b) => b.toString(16).padStart(2, "0");
+      return "avc1." + h(d[i+4]) + h(d[i+5]) + h(d[i+6]);
+    }
+  }
+  return null;
+}
+
+class PhoneView {
+  constructor(dev) {
+    this.serial = dev.serial;
+    this.seq = 0; this.ws = null; this.decoder = null; this.codec = null; this.configPkt = null;
+    this.needKey = true; this.resetPending = false; this.fallbackTimer = null; this.frames = 0;
+    this.pointers = new Map(); this.moves = new Map();
+    const q = store.get("quality:" + this.serial, "1280");
+    const long = Math.max(dev.width || 1080, dev.height || 2400), sc = Math.min(1, (q === "shots" ? 1280 : q) / long);
+    this.videoW = Math.round((dev.width || 1080) * sc); this.videoH = Math.round((dev.height || 2400) * sc);
+
+    const el = this.el = document.createElement("section");
+    el.className = "pane phone";
+    el.innerHTML = `
+      <div class="pane-head">
+        <span class="led pdot"></span>
+        <span class="pname" title="Make this the phone Claude, the scripts and file copies work on"></span>
+        <span class="tag"></span>
+        <span class="claude-mark">Claude</span>
+        <span class="grow1"></span>
+        <select title="Stream resolution (long side, px). Stills = refreshed pictures instead of video"><option value="720">720</option><option value="1024">1024</option>
+          <option value="1280">1280</option><option value="1920">1920</option><option value="shots">Stills</option></select>
+        <button class="icon quiet rc" title="Reconnect the stream">${ICON.reload}</button>
+      </div>
+      <div class="screen-wrap"><canvas tabindex="0"></canvas><div class="screen-msg">Connecting…</div></div>
+      <div class="controls">
+        <div class="keys">
+          <span class="grp">
+            <button data-key="4" title="Back (or right-click the screen)">${ICON.back}</button>
+            <button data-key="3" title="Home (or middle-click the screen)">${ICON.home}</button>
+            <button data-key="187" title="Recent apps">${ICON.recents}</button>
+          </span>
+          <span class="grp">
+            <button data-key="25" title="Volume down">${ICON.voldown}</button>
+            <button data-key="24" title="Volume up">${ICON.volup}</button>
+          </span>
+          <span class="grp">
+            <button data-key="26" title="Power button">${ICON.power}</button>
+            <button data-power="0" title="Turn the phone's own display off (the stream keeps working)">${ICON.dispoff}</button>
+            <button data-power="1" title="Turn the phone's own display back on">${ICON.dispon}</button>
+          </span>
+        </div>
+        <form class="typebar"><input placeholder="Type into the focused field" autocomplete="off"><button type="submit">Type</button></form>
+      </div>`;
+    this.canvas = $("canvas", el); this.ctx = this.canvas.getContext("2d");
+    this.msg = $(".screen-msg", el); this.dot = $(".pdot", el);
+    this.canvas.width = this.videoW; this.canvas.height = this.videoH;
+    $("select", el).value = q;
+    $("select", el).onchange = (e) => { store.set("quality:" + this.serial, e.target.value); this.connect(); };
+    $(".rc", el).onclick = () => this.connect();
+    $(".pname", el).onclick = () => setTarget(this.serial);
+    el.querySelectorAll("[data-key]").forEach(b => b.onclick = () => this.send({ t: "key", code: +b.dataset.key }));
+    el.querySelectorAll("[data-power]").forEach(b => b.onclick = () => this.send({ t: "power", on: b.dataset.power === "1" }));
+    $(".typebar", el).onsubmit = async (e) => {
+      e.preventDefault(); const inp = $("input", el); if (!inp.value) return;
+      await this.typeText(inp.value); inp.value = "";
+    };
+    this.bindInput();
+    this.update(dev);
+  }
+
+  update(dev) {
+    $(".pname", this.el).textContent = dev.name;
+    const t = $(".tag", this.el); t.className = "tag " + dev.role; t.textContent = dev.role;
+    t.title = dev.role === "proxy" ? "Goes online through the proxy gateway" : "Uses its own network (real IP)";
+    this.el.classList.toggle("target", this.serial === target);
+  }
+
+  setMsg(t, cls) { this.msg.textContent = t || ""; this.msg.style.display = t ? "flex" : "none"; this.dot.className = "led pdot " + (cls || ""); }
+
+  fit(maxW, paneW) {
+    const maxH = Math.max(200, window.innerHeight - 40 - 40 - 28 - 86);
+    const s = Math.min(maxH / this.videoH, maxW / this.videoW);
+    const w = Math.round(this.videoW * s);
+    this.canvas.style.width = w + "px";
+    this.canvas.style.height = Math.round(this.videoH * s) + "px";
+    const pw = paneW || Math.max(300, w + 28);
+    this.el.style.width = pw + "px";
+    this.el.classList.toggle("narrow", pw < 350);
+  }
+
+  send(o) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(o)); }
+
+  connect() {
+    const seq = ++this.seq;
+    clearTimeout(this.fallbackTimer);
+    if (this.ws) { this.ws.onclose = null; this.ws.close(); }
+    this.codec = null; this.configPkt = null;
+    this.setMsg("Connecting to the phone…", "busy");
+    const q = $("select", this.el).value, live = canDecode && q !== "shots";
+    const ws = this.ws = new WebSocket(wsUrl(`/ws/screen?serial=${encodeURIComponent(this.serial)}&video=${live ? 1 : 0}&max_size=${live ? q : 1280}`));
+    ws.binaryType = "arraybuffer";
+    ws.onmessage = (ev) => {
+      if (typeof ev.data !== "string") { this.onVideo(ev.data); return; }
+      const m = JSON.parse(ev.data);
+      if (m.type === "size") { this.videoW = m.width; this.videoH = m.height; layoutPhones(); }
+      else if (m.type === "hello") {
+        this.setMsg(live ? "Waiting for video…" : "Loading…", "ok");
+        if (!live) this.poll(seq); else setTimeout(() => { if (seq === this.seq) this.report(); }, 8000);
+      }
+      else if (m.type === "error") this.setMsg("Error: " + m.message, "bad");
+    };
+    ws.onclose = () => {
+      if (seq !== this.seq) return;
+      const prev = this.msg.textContent.startsWith("Error") ? this.msg.textContent + "\n" : "";
+      this.setMsg(prev + "Disconnected, retrying…", "bad");
+      setTimeout(() => { if (seq === this.seq) this.connect(); }, 3000);
+    };
+  }
+
+  destroy() {
+    this.seq++; clearTimeout(this.fallbackTimer);
+    if (this.ws) { this.ws.onclose = null; this.ws.close(); }
+    if (this.decoder && this.decoder.state !== "closed") try { this.decoder.close(); } catch {}
+    this.el.remove();
+  }
+
+  makeDecoder() {
+    if (this.decoder && this.decoder.state !== "closed") { try { this.decoder.close(); } catch {} }
+    this.decoder = new VideoDecoder({
+      output: (frame) => {
+        const c = this.canvas;
+        if (c.width !== frame.displayWidth || c.height !== frame.displayHeight) { c.width = frame.displayWidth; c.height = frame.displayHeight; }
+        this.ctx.drawImage(frame, 0, 0); frame.close(); this.frames++;
+        if (this.msg.style.display !== "none") this.setMsg("", "ok");
+      },
+      error: (e) => { console.warn("decoder", e); this.codec = null; this.needKey = true; this.requestReset(); },
+    });
+    // software decoding: frames from the GPU decoder can draw as a black canvas (Firefox + VA-API on Linux);
+    // these streams are small, so the CPU cost is negligible
+    this.decoder.configure({ codec: this.codec, optimizeForLatency: true, hardwareAcceleration: "prefer-software" });
+    this.needKey = true;
+  }
+
+  requestReset() {
+    if (this.resetPending || !this.ws || this.ws.readyState !== 1) return;
+    this.resetPending = true; this.send({ t: "reset" });
+    setTimeout(() => this.resetPending = false, 1500);
+  }
+
+  onVideo(buf) {
+    const dv = new DataView(buf), flags = dv.getUint8(0), pts = Number(dv.getBigUint64(1));
+    const data = new Uint8Array(buf, 9);
+    if (flags & 1) {
+      this.configPkt = data.slice();
+      const c = spsCodec(this.configPkt);
+      if (c && (c !== this.codec || !this.decoder || this.decoder.state === "closed")) { this.codec = c; this.makeDecoder(); }
+      return;
+    }
+    const dec = this.decoder;
+    if (!dec || dec.state !== "configured") return;
+    const key = !!(flags & 2);
+    if (this.needKey && !key) return;
+    if (!key && dec.decodeQueueSize > 8) { this.needKey = true; this.requestReset(); return; }
+    let payload = data;
+    if (key && this.configPkt) { payload = new Uint8Array(this.configPkt.length + data.length); payload.set(this.configPkt); payload.set(data, this.configPkt.length); }
+    this.needKey = false;
+    try { dec.decode(new EncodedVideoChunk({ type: key ? "key" : "delta", timestamp: pts, data: payload })); }
+    catch (e) { console.warn(e); this.needKey = true; this.requestReset(); }
+  }
+
+  async poll(seq) {
+    if (seq !== this.seq) return;
+    try {
+      const r = await fetch(`/api/screenshot?serial=${encodeURIComponent(this.serial)}`, { cache: "no-store" });
+      if (r.ok) {
+        const bmp = await createImageBitmap(await r.blob());
+        this.canvas.width = bmp.width; this.canvas.height = bmp.height; this.ctx.drawImage(bmp, 0, 0); bmp.close();
+        this.setMsg("", "ok");
+      }
+    } catch {}
+    this.fallbackTimer = setTimeout(() => this.poll(seq), 700);
+  }
+
+  pos(e) {
+    const r = this.canvas.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(this.videoW - 1, Math.round((e.clientX - r.left) / r.width * this.videoW))),
+      y: Math.max(0, Math.min(this.videoH - 1, Math.round((e.clientY - r.top) / r.height * this.videoH))),
+    };
+  }
+
+  report() {
+    let black = null;
+    try {
+      const w = this.canvas.width, h = this.canvas.height, d = this.ctx.getImageData(w / 4, h / 4, w / 2, h / 2).data;
+      let sum = 0; for (let i = 0; i < d.length; i += 4 * 97) sum += d[i] + d[i + 1] + d[i + 2];
+      black = sum === 0;
+    } catch {}
+    fetch("/api/clientlog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      serial: this.serial, ua: navigator.userAgent, codec: this.codec, decoder: this.decoder && this.decoder.state,
+      frames: this.frames, canvas: [this.canvas.width, this.canvas.height], black, msg: this.msg.textContent }) }).catch(() => {});
+  }
+
+  async typeText(text) {
+    const r = await fetch(`/api/type?serial=${encodeURIComponent(this.serial)}`, { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    if (!r.ok) logConsole(`\n[type · ${devName(this.serial)}] ${await r.text()}\n`);
+  }
+
+  bindInput() {
+    const c = this.canvas;
+    c.addEventListener("pointerdown", (e) => {
+      if (e.button === 2) return;
+      if (e.button === 1) { e.preventDefault(); this.send({ t: "key", code: 3 }); return; }
+      c.focus(); c.setPointerCapture(e.pointerId);
+      const id = e.pointerType === "mouse" ? -2 : e.pointerId;
+      this.pointers.set(e.pointerId, id);
+      this.send({ t: "touch", a: 0, id, ...this.pos(e) });
+    });
+    c.addEventListener("pointermove", (e) => {
+      if (!this.pointers.has(e.pointerId)) return;
+      const first = this.moves.size === 0;
+      this.moves.set(e.pointerId, { t: "touch", a: 2, id: this.pointers.get(e.pointerId), ...this.pos(e) });
+      if (first) requestAnimationFrame(() => { this.moves.forEach(m => this.send(m)); this.moves.clear(); });
+    });
+    const up = (e) => {
+      if (!this.pointers.has(e.pointerId)) return;
+      this.moves.forEach(m => this.send(m)); this.moves.clear();
+      this.send({ t: "touch", a: 1, id: this.pointers.get(e.pointerId), ...this.pos(e) });
+      this.pointers.delete(e.pointerId);
+    };
+    c.addEventListener("pointerup", up);
+    c.addEventListener("pointercancel", up);
+    c.addEventListener("contextmenu", (e) => { e.preventDefault(); this.send({ t: "key", code: 4 }); });
+    c.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const unit = e.deltaMode === 1 ? 1 : 100;
+      this.send({ t: "scroll", ...this.pos(e), h: Math.max(-16, Math.min(16, -e.deltaX / unit)), v: Math.max(-16, Math.min(16, -e.deltaY / unit)) });
+    }, { passive: false });
+    c.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") return;
+      if (KEYMAP[e.key] !== undefined) { e.preventDefault(); this.send({ t: "key", code: KEYMAP[e.key], action: 0 }); return; }
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        if (/^[\x20-\x7e]$/.test(e.key)) this.send({ t: "text", text: e.key }); else this.typeText(e.key);
+      }
+    });
+    c.addEventListener("keyup", (e) => { if (KEYMAP[e.key] !== undefined) { e.preventDefault(); this.send({ t: "key", code: KEYMAP[e.key], action: 1 }); } });
+    c.addEventListener("paste", (e) => { const t = e.clipboardData.getData("text"); if (t) { e.preventDefault(); this.typeText(t); } });
+  }
+}
+
+function layoutPhones() {
+  const n = Math.max(1, views.size);
+  const w = window.innerWidth;
+  if (w <= 780) { views.forEach(v => v.fit(w - 28, w)); return; }               // stacked, full width
+  if (w <= 1280) { views.forEach(v => v.fit(Math.min(480, w / n - 29))); return; }  // phones in their own row
+  // side by side with the chat (min 420) and the side column (350): each phone gets an equal share
+  const share = Math.floor((w - 420 - 350) / n) - 1;
+  views.forEach(v => {
+    v.fit(Math.min(480, share - 28));
+    const cw = parseFloat(v.canvas.style.width);
+    v.el.style.width = Math.min(share, Math.max(cw + 28, Math.min(share, 300))) + "px";
+    v.el.classList.toggle("narrow", parseFloat(v.el.style.width) < 350);
+  });
+}
+window.addEventListener("resize", layoutPhones);
+
+function syncViews() {
+  const usable = devices.filter(d => d.state === "device");
+  const box = $("#phones");
+  for (const [s, v] of views) if (!usable.some(d => d.serial === s)) { v.destroy(); views.delete(s); }
+  for (const d of usable) {
+    let v = views.get(d.serial);
+    if (!v) { v = new PhoneView(d); views.set(d.serial, v); box.appendChild(v.el); v.connect(); }
+    v.update(d);
+  }
+  usable.forEach(d => box.appendChild(views.get(d.serial).el));   // proxy phone first
+  let empty = $(".empty", box);
+  if (usable.length && empty) empty.remove();
+  if (!usable.length) {
+    if (!empty) { empty = document.createElement("div"); empty.className = "empty"; box.appendChild(empty); }
+    const notReady = devices.filter(d => d.state !== "device");
+    empty.textContent = notReady.length
+      ? notReady.map(d => `${d.name}: ${d.state === "unauthorized" ? "tap “Allow” on the phone's USB debugging prompt" : d.state}`).join(" · ")
+      : "No phone connected. Check the USB cable and that USB debugging is on.";
+  }
+  $("#summary").textContent = usable.length ? usable.map(d => d.name).join(" · ") : "no phone connected";
+  layoutPhones();
+}
+
+/* ======================================================================= target phone (Claude + scripts + files) */
+function setTarget(s) {
+  if (s === target) return;
+  target = s; store.set("target", s);
+  renderTarget(); connectChat(); loadFiles();
+}
+function renderTarget() {
+  const box = $("#targetPick"); box.innerHTML = "";
+  for (const d of devices.filter(d => d.state === "device")) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = d.serial === target ? "on" : "";
+    b.title = `Claude, the scripts and file copies act on ${d.name}`;
+    b.innerHTML = `<span class="led ${d.chat_running ? "busy" : "ok"}"></span>${esc(d.name)}`;
+    b.onclick = () => setTarget(d.serial);
+    box.appendChild(b);
+  }
+  views.forEach(v => v.el.classList.toggle("target", v.serial === target));
+  const name = target ? devName(target) : "—";
+  $("#scriptsOn").textContent = target ? "· " + name : "";
+  $("#pushName").textContent = `Copy to ${target ? name : "the selected phone"}'s gallery`;
+  const gw = devices.find(d => d.serial === gatewaySerial);
+  $("#proxyGroup").style.display = gatewaySerial ? "" : "none";
+  $("#gwName").textContent = gw ? `· ${gw.name} only` : "";
+  $("#prompt").placeholder = "Message Claude…";
+}
+
+async function loadDevices() {
+  try {
+    const r = await (await fetch("/api/devices")).json();
+    if (pageBuild && r.build && r.build !== pageBuild) { location.reload(); return; }  // panel was updated
+    pageBuild = pageBuild || r.build;
+    devices = r.devices; gatewaySerial = r.gateway_serial;
+  } catch { return; }
+  syncViews();
+  const usable = devices.filter(d => d.state === "device");
+  if (!usable.some(d => d.serial === target) && usable.length) {
+    const saved = store.get("target", null);
+    target = null;
+    setTarget((usable.find(d => d.serial === saved) || usable[0]).serial);
+    return;
+  }
+  renderTarget();
+}
+
+/* ======================================================================= chat */
+const msgs = $("#messages"), log = $("#log"), jump = $("#jump");
+let cws = null, chatRunning = false, lastTool = null, lastKind = null;
+
+// Follow mode: the view sticks to the newest event while it is at the bottom; scrolling up pauses it
+// ("Latest" jumps back and resumes). Content that grows later (pictures loading, tool output) stays pinned too.
+let follow = true;
+const nearBottom = () => msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 48;
+function pin() { if (follow) msgs.scrollTop = msgs.scrollHeight; jump.classList.toggle("on", !follow); }
+let lastTop = 0;
+msgs.addEventListener("scroll", () => {
+  // only moving UP means the user wants to read back; a late scroll event after content grew is not that
+  if (msgs.scrollTop < lastTop - 4) follow = false;
+  if (nearBottom()) follow = true;
+  lastTop = msgs.scrollTop;
+  jump.classList.toggle("on", !follow);
+});
+msgs.addEventListener("wheel", (e) => { if (e.deltaY < 0 && msgs.scrollTop > 0) { follow = false; jump.classList.add("on"); } }, { passive: true });
+new ResizeObserver(pin).observe(log);
+new ResizeObserver(pin).observe(msgs);
+jump.onclick = () => { follow = true; pin(); };
+
+function md(text) {
+  const parts = String(text).split(/```(?:[\w-]*)\n?([\s\S]*?)```/g);
+  return parts.map((p, i) => {
+    if (i % 2) return `<pre>${esc(p)}</pre>`;
+    return esc(p).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
+  }).join("");
+}
+const hhmm = (ts) => ts ? new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+function block(kind, who, ts, html) {
+  const el = document.createElement("div");
+  const head = lastKind !== kind;
+  el.className = `ev ${kind}` + (head ? " turn" : "");
+  el.innerHTML = (head ? `<div class="who"><span class="label">${who}</span><time>${hhmm(ts)}</time></div>` : "") + `<div class="body">${html}</div>`;
+  return el;
+}
+function renderEvent(ev) {
+  let el;
+  const k = ev.kind;
+  if (k === "user") el = block("user", "You", ev.ts, esc(ev.text));
+  else if (k === "assistant") el = block("assistant", "Claude", ev.ts, md(ev.text));
+  else if (k === "tool") {
+    el = document.createElement("details"); el.className = "ev tool";
+    const nm = ev.name === "Bash" ? "$" : ev.name;
+    el.innerHTML = `<summary><span class="nm">${esc(nm)}</span><span class="cmd">${esc(ev.summary)}</span></summary><div class="peek"></div><div class="full">${esc(ev.summary)}</div>`;
+    lastTool = el;
+  }
+  else if (k === "tool_result") {
+    if (lastTool) {
+      const text = (ev.text || "").trim() || "(no output)";
+      const first = text.split("\n").find(l => l.trim()) || "(no output)";
+      $(".peek", lastTool).textContent = (ev.error ? "error: " : "→ ") + first;
+      const out = document.createElement("div"); out.className = "full"; out.textContent = text; lastTool.appendChild(out);
+      if (ev.error) lastTool.classList.add("err");
+      pin();
+    }
+    return;
+  }
+  else if (k === "image") {
+    el = document.createElement("figure"); el.className = "ev shot";
+    el.innerHTML = `<a href="${esc(ev.url)}" target="_blank" rel="noopener"><img src="${esc(ev.url)}" alt="${esc(ev.caption || "Phone screen")}"></a>` +
+      (ev.caption ? `<figcaption>${esc(ev.caption)}</figcaption>` : "");
+    $("img", el).addEventListener("load", pin);
+  }
+  else if (k === "done") {
+    if (ev.error) el = block("error", "Stopped", ev.ts, esc(ev.text || "Failed."));
+    else {
+      el = document.createElement("div"); el.className = "ev done";
+      el.textContent = ["done", ev.turns ? `${ev.turns} steps` : "", ev.cost != null ? `$${(+ev.cost).toFixed(3)}` : ""].filter(Boolean).join(" · ");
+    }
+  }
+  else if (k === "error") el = block("error", "Error", ev.ts, esc(ev.text));
+  else if (k === "info") { el = document.createElement("div"); el.className = "ev info"; el.textContent = ev.text; }
+  if (!el) return;
+  // a name label starts each new speaker; tool steps and pictures belong to Claude's turn
+  if (k === "user" || k === "assistant" || k === "error") lastKind = k;
+  else if (k === "done" || k === "info") lastKind = null;
+  else if (lastKind === "user") lastKind = "steps";
+  log.appendChild(el);
+  pin();
+}
+function setRunning(r) {
+  chatRunning = r;
+  $("#working").classList.toggle("on", r);
+  $("#workingText").textContent = `Claude is working on ${target ? devName(target) : "the phone"}…`;
+  $("#stopBtn").disabled = !r; $("#sendBtn").disabled = r;
+  $("#chatDot").className = "led " + (r ? "busy" : "ok");
+  pin();
+}
+function connectChat() {
+  if (cws) { cws.onclose = null; cws.close(); }
+  if (!target) return;
+  const mine = target;
+  log.innerHTML = ""; setRunning(false);
+  cws = new WebSocket(wsUrl(forTarget("/ws/chat")));
+  cws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === "history") {
+      log.innerHTML = ""; lastTool = null; lastKind = null;
+      if (!m.events.length) log.innerHTML = `<div class="intro"><p>Tell Claude what to do on <b>${esc(devName(mine))}</b>, for example “Post the newest video to TikTok with the caption …”.</p><p>Each phone has its own conversation; switch phones with the buttons above. Claude adds a picture of the screen after each step.</p></div>`;
+      m.events.forEach(ev => renderEvent(ev));
+      follow = true; pin(); setRunning(m.running);
+    }
+    else if (m.type === "event") renderEvent(m.event);
+    else if (m.type === "state") setRunning(m.running);
+  };
+  cws.onopen = () => $("#chatDot").className = "led " + (chatRunning ? "busy" : "ok");
+  cws.onclose = () => { $("#chatDot").className = "led bad"; setTimeout(() => { if (target === mine) connectChat(); }, 2000); };
+}
+const prompt = $("#prompt");
+$("#composer").onsubmit = (e) => {
+  e.preventDefault();
+  const text = prompt.value.trim();
+  if (!text || chatRunning || !cws || cws.readyState !== 1) return;
+  cws.send(JSON.stringify({ t: "send", text })); prompt.value = ""; autosize();
+  follow = true; pin();
+};
+prompt.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#composer").requestSubmit(); } });
+function autosize() { prompt.style.height = "auto"; prompt.style.height = Math.min(200, prompt.scrollHeight + 2) + "px"; }
+prompt.addEventListener("input", autosize);
+$("#stopBtn").onclick = () => cws && cws.send(JSON.stringify({ t: "stop" }));
+$("#newChat").onclick = () => { if (confirm(`Start a new conversation with ${devName(target)}? Claude forgets the current one.`)) cws.send(JSON.stringify({ t: "new" })); };
+
+/* ======================================================================= scripts */
+const cons = $("#console");
+let consFresh = true, consFollow = true, consTop = 0;
+cons.addEventListener("scroll", () => {
+  if (cons.scrollTop < consTop - 4) consFollow = false;
+  if (cons.scrollHeight - cons.scrollTop - cons.clientHeight < 40) consFollow = true;
+  consTop = cons.scrollTop;
+});
+function logConsole(t) {
+  if (consFresh) { cons.textContent = ""; cons.classList.remove("muted"); consFresh = false; }
+  cons.textContent += t;
+  if (consFollow) cons.scrollTop = cons.scrollHeight;
+}
+$("#clearConsole").onclick = () => { cons.textContent = ""; consFollow = true; };
+document.querySelectorAll("[data-run]").forEach(btn => btn.onclick = async () => {
+  if (btn.dataset.confirm && !confirm(btn.dataset.confirm)) return;
+  btn.disabled = true; btn.classList.add("running"); $("#runState").textContent = "running…";
+  const onDev = btn.closest("#proxyGroup") ? devName(gatewaySerial) : devName(target);
+  const group = btn.closest(".group").querySelector(".label").firstChild.textContent.trim();
+  consFollow = true;
+  logConsole(`\n── ${group} › ${btn.textContent} · ${onDev} ──\n`);
+  try {
+    const r = await fetch(forTarget("/api/run/" + btn.dataset.run), { method: "POST" });
+    if (!r.ok) { logConsole(await r.text() + "\n"); return; }
+    const rd = r.body.getReader(), dec = new TextDecoder();
+    for (;;) { const { value, done } = await rd.read(); if (done) break; logConsole(dec.decode(value, { stream: true })); }
+  } catch (e) { logConsole(`\n[error] ${e}\n`); }
+  finally { btn.disabled = false; btn.classList.remove("running"); $("#runState").textContent = ""; }
+});
+
+/* ======================================================================= files */
+const fmtSize = (n) => n > 1 << 30 ? (n / (1 << 30)).toFixed(1) + " GB" : n > 1 << 20 ? (n / (1 << 20)).toFixed(1) + " MB" : Math.ceil(n / 1024) + " KB";
+const platBoxes = [...document.querySelectorAll("#platforms input")];
+const savedPlats = store.get("platforms", null);
+if (savedPlats) platBoxes.forEach(b => b.checked = savedPlats.includes(b.value));
+platBoxes.forEach(b => b.onchange = () => store.set("platforms", platBoxes.filter(x => x.checked).map(x => x.value)));
+
+async function loadFiles() {
+  const list = await (await fetch("/api/files")).json();
+  $("#fileCount").textContent = list.length ? list.length + (list.length > 1 ? " files" : " file") : "";
+  const ul = $("#files"); ul.innerHTML = "";
+  if (!list.length) ul.innerHTML = `<li class="none">No files yet.</li>`;
+  const tname = devName(target);
+  for (const f of list) {
+    const here = f.phones[target];
+    const on = Object.keys(f.phones).map(devName);
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="fname" title="${esc(f.name)}">${esc(f.name)}</span>
+      <span class="fmeta">${fmtSize(f.size)} · ${on.length ? "on " + on.map(n => n === tname ? `<b>${esc(n)}</b>` : esc(n)).join(", ") : "PC only"}</span>
+      <span class="factions">
+        <button data-a="post" class="primary" title="Ask Claude to publish this from ${esc(tname)}">Post</button>
+        ${here ? "" : `<button data-a="push" title="Copy to ${esc(tname)}'s gallery">To phone</button>`}
+        <button data-a="del" class="icon quiet" title="Delete from the PC and the phones">${ICON.x}</button>
+      </span>`;
+    li.querySelector('[data-a="post"]').onclick = () => {
+      const plats = platBoxes.filter(x => x.checked).map(x => x.value);
+      const where = here ? `It is on the phone at ${here}` : `It is only on the PC (uploads/${f.name}); push it to the phone first`;
+      prompt.value = `Publish the video "${f.name}" to ${plats.join(", ") || "TikTok"}. ${where}.\nCaption: `;
+      autosize(); prompt.focus(); prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+    };
+    const push = li.querySelector('[data-a="push"]');
+    if (push) push.onclick = async () => {
+      push.disabled = true; push.textContent = "Copying…";
+      const r = await fetch(forTarget(`/api/files/${encodeURIComponent(f.name)}/push`), { method: "POST" });
+      if (!r.ok) logConsole(`\n[push ${f.name} → ${tname}] ${await r.text()}\n`);
+      loadFiles();
+    };
+    li.querySelector('[data-a="del"]').onclick = async () => {
+      if (!confirm(`Delete ${f.name} from the PC${on.length ? " and " + on.join(", ") : ""}?`)) return;
+      const r = await (await fetch(`/api/files/${encodeURIComponent(f.name)}`, { method: "DELETE" })).json();
+      if (r.not_removed_from && r.not_removed_from.length) logConsole(`\n[delete] ${f.name}: still on unplugged ${r.not_removed_from.map(devName).join(", ")}\n`);
+      loadFiles();
+    };
+    ul.appendChild(li);
+  }
+}
+
+const drop = $("#drop"), dropText = $("#drop span"), fileInput = $("#fileInput");
+const DROP_TEXT = dropText.textContent;
+function uploadFiles(files) {
+  if (!files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append("file", f, f.name);
+  const xhr = new XMLHttpRequest(), bar = $("#progress");
+  const push = $("#pushToPhone").checked, toName = devName(target);
+  bar.style.display = "block"; bar.firstElementChild.style.width = "0";
+  dropText.textContent = `Uploading ${files.length} file${files.length > 1 ? "s" : ""}…`;
+  xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.firstElementChild.style.width = (e.loaded / e.total * 100) + "%"; };
+  xhr.upload.onload = () => { dropText.textContent = push ? `Copying to ${toName}…` : "Saving…"; };
+  xhr.onloadend = () => {
+    bar.style.display = "none";
+    dropText.textContent = DROP_TEXT;
+    if (xhr.status !== 200) logConsole(`\n[upload] failed: ${xhr.status} ${xhr.responseText}\n`);
+    else for (const f of JSON.parse(xhr.responseText)) {
+      logConsole(`\n[upload] ${f.name}` + (f.phone_path ? ` → ${toName}: ${f.phone_path}` : "") + (f.push_error ? ` (push failed: ${f.push_error})` : "") + "\n");
+    }
+    loadFiles();
+  };
+  xhr.open("POST", forTarget("/api/upload?push=" + (push ? 1 : 0)));
+  xhr.send(fd);
+}
+drop.onclick = (e) => { if (e.target !== fileInput) fileInput.click(); };
+fileInput.onchange = () => { uploadFiles([...fileInput.files]); fileInput.value = ""; };
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => uploadFiles([...e.dataTransfer.files]));
+store.get("pushToPhone", true) || ($("#pushToPhone").checked = false);
+$("#pushToPhone").onchange = () => store.set("pushToPhone", $("#pushToPhone").checked);
+
+/* ======================================================================= boot */
+loadDevices();
+setInterval(loadDevices, 4000);
+</script>
+</body>
+</html>

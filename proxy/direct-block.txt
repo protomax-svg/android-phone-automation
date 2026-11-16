@@ -1,0 +1,71 @@
+# Domains (and all their subdomains) that are BLOCKED in DIRECT mode, so your accounts
+# are never seen from your real IP. They work normally in PROXY mode.
+# One domain per line. Re-run "sudo proxy/install.sh" after editing.
+
+# Google account + all Google services (Play Store, Gmail, YouTube login, Play services check-ins)
+google.com
+googleapis.com
+googleusercontent.com
+gmail.com
+android.com
+gstatic.com
+googlevideo.com
+googlesyndication.com
+googleadservices.com
+doubleclick.net
+app-measurement.com
+crashlytics.com
+firebaseio.com
+firebase.com
+youtube.com
+youtu.be
+ytimg.com
+ggpht.com
+youtube-nocookie.com
+gvt1.com
+gvt2.com
+gvt3.com
+withgoogle.com
+g.co
+goo.gl
+
+# TikTok / ByteDance
+tiktok.com
+tiktokv.com
+tiktokv.us
+tiktokv.eu
+tiktokw.us
+tiktokcdn.com
+tiktokcdn-us.com
+tiktokcdn-eu.com
+tiktokd.net
+tiktokd.org
+ttwstatic.com
+musical.ly
+byteoversea.com
+byteoversea.net
+ibytedtos.com
+ibyteimg.com
+ipstatp.com
+isnssdk.com
+sgsnssdk.com
+byteintlapi.com
+bytedapm.com
+byteglb.com
+tiktok-row.net
+tiktok-row.org
+capcut.com
+
+# Instagram / Facebook / Threads (Meta)
+instagram.com
+cdninstagram.com
+ig.me
+threads.net
+threads.com
+facebook.com
+facebook.net
+fb.com
+fb.me
+fbcdn.net
+fbsbx.com
+meta.com

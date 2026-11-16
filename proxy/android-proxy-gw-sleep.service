@@ -1,0 +1,13 @@
+[Unit]
+Description=Stop the Android gateway before sleep and restore its mode after resume
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/android-proxy-gw/gw.sh pre-sleep
+ExecStop=/usr/local/lib/android-proxy-gw/gw.sh post-resume
+
+[Install]
+WantedBy=sleep.target

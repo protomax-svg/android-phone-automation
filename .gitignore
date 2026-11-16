@@ -1,0 +1,21 @@
+# Python
+.venv/
+.venv-agent/
+__pycache__/
+*.pyc
+
+# Runtime data (screenshots, logs incl. Claude chat history, pid files, uploads)
+logs/
+run/
+output/
+uploads/
+work/
+
+# Browser profile (cookies / sessions)
+chr-scroll/
+
+# Secrets - never commit
+proxy/proxy.env
+proxy/ap.env
+*.secret
+*.psk

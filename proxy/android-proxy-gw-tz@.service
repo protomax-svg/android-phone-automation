@@ -1,0 +1,9 @@
+[Unit]
+Description=Android gateway: phone timezone follows the exit IP (mode %i)
+BindsTo=android-proxy-gw@%i.service
+After=android-proxy-gw@%i.service
+
+[Service]
+ExecStart=/usr/local/lib/android-proxy-gw/tzsync.sh %i
+Restart=on-failure
+RestartSec=5
